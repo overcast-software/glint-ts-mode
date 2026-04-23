@@ -1,20 +1,27 @@
-;;; lsp-glint.el --- LSP support for Ember Glint -*- lexical-binding: t; -*-
+;;; glint-ts-mode-lsp.el --- LSP support for Ember Glint -*- lexical-binding: t; -*-
+
+;; Copyright (C) 2026 overcast-software
 
 ;; Author: Doug Headley <doug@dougheadley.com>
 ;; Keywords: languages, tools, lsp, ember, glint
-;; Package-Requires: ((emacs "30.1") (lsp-mode "9.0"))
-;; Version: 0.1.0
 ;; URL: https://github.com/overcast-software/glint-ts-mode
+;; SPDX-License-Identifier: MIT
 
 ;;; Commentary:
 ;; LSP support for Ember Glint (.gts/.gjs) files using glint-language-server.
+;;
+;; To enable, call `glint-ts-mode-lsp-setup' or add it to your init file:
+;;
+;;   (with-eval-after-load 'glint-ts-mode
+;;     (require 'glint-ts-mode-lsp)
+;;     (glint-ts-mode-lsp-setup))
 
 ;;; Code:
 
 (require 'lsp-mode)
 (require 'glint-ts-mode)
 
-(defgroup lsp-glint nil
+(defgroup glint-ts-mode-lsp nil
   "LSP support for Ember Glint."
   :group 'lsp-mode)
 
@@ -22,7 +29,7 @@
 ;; Project root detection
 ;; ---------------------------------------------------------------------
 
-(defun lsp-glint--project-root ()
+(defun glint-ts-mode-lsp--project-root ()
   "Return project root directory for Glint."
   (or (locate-dominating-file default-directory "glint.json")
       (locate-dominating-file default-directory "tsconfig.json")
@@ -33,15 +40,15 @@
 ;; Language server command resolution
 ;; ---------------------------------------------------------------------
 
-(defun lsp-glint--server-command ()
+(defun glint-ts-mode-lsp--server-command ()
   "Return the command to start glint-language-server."
-  (let* ((root (lsp-glint--project-root))
+  (let* ((root (glint-ts-mode-lsp--project-root))
          (local (when root
                   (expand-file-name "node_modules/.bin/glint-language-server" root)))
          (cmd (cond
                ((and local (file-executable-p local)) local)
                ((executable-find "glint-language-server") "glint-language-server")
-               (t (error "glint-language-server not found")))))
+               (t (error "Glint language server not found")))))
     (list cmd "--stdio")))
 
 ;; ---------------------------------------------------------------------
@@ -49,38 +56,39 @@
 ;; ---------------------------------------------------------------------
 
 ;;;###autoload
-(lsp-register-client
-(make-lsp-client
- :new-connection (lsp-stdio-connection #'lsp-glint--server-command)
- :major-modes '(glint-ts-mode)
- :priority 10
- :server-id 'glint
- :multi-root t
- :initialized-fn (lambda (workspace)
-                   ;; tell the server this is TypeScript
-                   (with-lsp-workspace workspace
-                     (lsp--set-configuration
-                      `(:languageId "typescript"))))))
+(with-eval-after-load 'lsp-mode
+  (lsp-register-client
+   (make-lsp-client
+    :new-connection (lsp-stdio-connection #'glint-ts-mode-lsp--server-command)
+    :major-modes '(glint-ts-mode)
+    :priority 10
+    :server-id 'glint
+    :multi-root t
+    :initialized-fn (lambda (workspace)
+                      (with-lsp-workspace workspace
+                        (lsp--set-configuration
+                         `(:languageId "typescript"))))))
+  (add-to-list 'lsp-language-id-configuration '(glint-ts-mode . "typescript")))
 
-(add-to-list 'lsp-language-id-configuration '(glint-ts-mode . "typescript"))
 ;; ---------------------------------------------------------------------
 ;; Disable TypeScript LSP in Glint buffers
 ;; ---------------------------------------------------------------------
 
-(defun lsp-glint--disable-ts-ls ()
+(defun glint-ts-mode-lsp--disable-ts-ls ()
   "Disable TypeScript LSP in Glint buffers."
   (setq-local lsp-disabled-clients
               (append lsp-disabled-clients '(ts-ls))))
 
 ;; ---------------------------------------------------------------------
-;; Auto-start hooks
+;; User entry point
 ;; ---------------------------------------------------------------------
 
 ;;;###autoload
-(add-hook 'glint-ts-mode-hook #'lsp-glint--disable-ts-ls)
+(defun glint-ts-mode-lsp-setup ()
+  "Enable LSP integration for `glint-ts-mode' buffers."
+  (interactive)
+  (add-hook 'glint-ts-mode-hook #'glint-ts-mode-lsp--disable-ts-ls)
+  (add-hook 'glint-ts-mode-hook #'lsp-deferred))
 
-;;;###autoload
-(add-hook 'glint-ts-mode-hook #'lsp-deferred)
-
-(provide 'lsp-glint)
-;;; lsp-glint.el ends here
+(provide 'glint-ts-mode-lsp)
+;;; glint-ts-mode-lsp.el ends here
